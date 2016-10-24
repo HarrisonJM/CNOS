@@ -1,0 +1,6 @@
+eml(eth0) inet 164.11.80.49  netmask 255.255.255.0  broadcast 164.11.80.255
+
+MTU - sets the maximum transfer unit of the thingy
+
+
+KENNY IP: 164.11.8.8
