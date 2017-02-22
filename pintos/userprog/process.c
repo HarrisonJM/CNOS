@@ -20,17 +20,21 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void GetCommand(const char *str, char** argv, int* argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
    //PART 1 IS HERE
-tid_t process_execute (const char *file_name) 
+tid_t process_execute (const char *file_name) //We start here 
 {
   //file name is our program
   char *fn_copy;
   tid_t tid;
+
+  char *argv[MAXARGSBYTES];
+  int argc = 0;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -43,8 +47,10 @@ tid_t process_execute (const char *file_name)
 
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  //GetCommand(file_name, argv, &argc);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy); //we go into start_process
 
   if (tid == TID_ERROR)
   {
@@ -72,8 +78,11 @@ static void start_process (void *file_name_)
   
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+
+  if (!success)
+  {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -157,7 +166,7 @@ typedef uint16_t Elf32_Half;
 /* Executable header.  See [ELF1] 1-4 to 1-8.
    This appears at the very beginning of an ELF binary. */
 struct Elf32_Ehdr
-  {
+{
     unsigned char e_ident[16];
     Elf32_Half    e_type;
     Elf32_Half    e_machine;
@@ -172,7 +181,7 @@ struct Elf32_Ehdr
     Elf32_Half    e_shentsize;
     Elf32_Half    e_shnum;
     Elf32_Half    e_shstrndx;
-  };
+};
 
 /* Program header.  See [ELF1] 2-2 to 2-4.
    There are e_phnum of these, starting at file offset e_phoff
@@ -226,17 +235,17 @@ bool load (const char *file_name, void (**eip) (void), void **esp)
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
-    goto done;
+    goto done;    
   process_activate ();
 
   /* Open executable file. */
   file = filesys_open (file_name);
 
   if (file == NULL) 
-    {
-	printf ("load: %s: open failed\n", file_name);
+  {
+      printf ("load: %s: open failed\n", file_name);
       goto done; 
-    }
+  }
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -448,6 +457,7 @@ static bool setup_stack (void **esp)
       } else
         palloc_free_page (kpage);
   }
+
   return success;
 }
 
@@ -468,6 +478,37 @@ static bool install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+//-------MY EXTRA FUNCTIONS HERE---------------
+
+/// Name: GetCommand
+/// Parameters: *str = the string to be split up
+///             **argv = all of the commands
+///             *argc = how many commands there are (including file name)
+/// Purpose: Takes a string and passes it to strtok_r to be split up and stored,
+///          it also counts the number of arguments given
+static void GetCommand(const char *str, char** argv, int* argc)
+{
+  char* svp; //pointer to save strtok_r's position
+  char* arg; //arguments
+  char* strcp = NULL;
+
+  strlcpy(strcp, str, PGSIZE);
+  
+  argv[0] = strtok_r(strcp, " ", &svp); //file name
+  
+  *argc = 1;
+
+  arg = strtok_r(NULL, " ", &svp);
+
+  while(arg != NULL)
+  {
+    argv[*argc] = arg;
+    (*argc)++;
+
+    arg = strtok_r(NULL, " ", &svp);
+  }
 }
 
 //--------------------------------------------------------------------
