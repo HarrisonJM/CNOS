@@ -515,6 +515,7 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
           int len = strlen(argv[i]) +1;
           *esp -= len;
           memcpy(*esp, fn_copy, len);
+          total_length += len;
         }
 
         *esp -= 4 - total_length % 4; //align
