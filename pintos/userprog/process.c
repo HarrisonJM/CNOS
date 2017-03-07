@@ -20,21 +20,18 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void GetCommand(const char *str, char** argv, int* argc);
+//static void GetCommand(const char *str, char** argv, int* argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
    //PART 1 IS HERE
-tid_t process_execute (const char *file_name) //We start here 
+tid_t process_execute (const char *file_name)
 {
   //file name is our program
   char *fn_copy;
-  tid_t tid;
-
-  char *argv[MAXARGSBYTES];
-  int argc = 0;
+  tid_t tid; //just an int
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -47,22 +44,23 @@ tid_t process_execute (const char *file_name) //We start here
 
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  //GetCommand(file_name, argv, &argc);
-
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy); //we go into start_process
+  //pass in program name and arguments seperately
+  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy); //we go into start_process
 
   if (tid == TID_ERROR)
   {
     palloc_free_page (fn_copy);
+    return tid;
   }
+
 
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
-static void start_process (void *file_name_)
+static void start_process (void *file_name_) //we start here
 {
   char *file_name = file_name_;
   struct intr_frame if_;
@@ -213,7 +211,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char* file_name);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -223,7 +221,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool load (const char *file_name, void (**eip) (void), void **esp) 
+bool load (const char *file_name, void (**eip) (void), void **esp)///////////////////////////////////////////////////////////////////////////////////
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -238,8 +236,22 @@ bool load (const char *file_name, void (**eip) (void), void **esp)
     goto done;    
   process_activate ();
 
+  char* fn_copy = palloc_get_page (0);
+  char* safecp = palloc_get_page(0);
+
+  if (fn_copy == NULL)
+  {
+    return TID_ERROR;
+  }
+  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (safecp, file_name, PGSIZE);
+
+  char* svp, *filename = strtok_r(fn_copy, " ", &svp);
+
+  //palloc_free_page(fn_copy); //No longer needed
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (filename);
 
   if (file == NULL) 
   {
@@ -320,7 +332,7 @@ bool load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, safecp))
     goto done;
 
   /* Start address. */
@@ -442,10 +454,11 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-static bool setup_stack (void **esp)
+static bool setup_stack (void **esp, char* file_name)///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 {
   uint8_t *kpage;
   bool success = false;
+  
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
@@ -453,9 +466,81 @@ static bool setup_stack (void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success) 
       {
-        *esp = PHYS_BASE - 12; //CHANGING STUFF
-      } else
+        int argc = 0; //records total size. -1 for indexing
+        size_t maxsize, total_length = 0;
+        char *fn_copy = palloc_get_page (0);
+        char *arg;
+        char *svp;
+
+        if (fn_copy == NULL) //move this into function?
+        {
+          return TID_ERROR;
+        }
+        strlcpy (fn_copy, file_name, PGSIZE);
+
+        arg = strtok_r(file_name, " ", &svp);
+        ++argc;
+        maxsize = strlen(arg) +1;
+
+        while((arg = strtok_r(NULL, " ", &svp))) //find largest argument and count arguments
+        {
+          ++argc; //we need the number of arguments we have
+          if((strlen(arg) +1) > maxsize)
+          {
+              maxsize = strlen(arg) +1;
+          }
+        }
+
+        char argv[argc][maxsize];
+        strlcpy (file_name, fn_copy, PGSIZE);
+
+        arg = strtok_r(file_name, " ", &svp);      
+
+        int i = argc;
+        while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
+        {
+          strlcpy(argv[i-1], arg, strlen(arg));
+          --i;
+        }
+
+        *esp = PHYS_BASE;
+
+        for(i = 0; i < argc-1; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
+        {
+          int len = strlen(argv[i]) +1;
+          *esp -= len;
+          memcpy(*esp, fn_copy, len);
+        }
+
+        *esp -= 4 - total_length % 4; //align
+
+        *esp -= 4;
+        *(int*)*esp = 0x0; //argv end null
+
+        for(i = 0; i < argc; ++i) //push our pointers on
+        {
+          *esp -= 4;
+          *(char*)*esp = (char*)&argv[i];
+        }
+
+        //finally, push argv, argc and return address
+        *esp -= 4;
+        *(char**)*esp = (char**)argv;
+        
+        *esp -= 4;
+        *(int*)*esp = (int*)argc;
+
+        *esp -= 4;
+        *(int*)*esp = 0x0;
+        
+
+
+        hex_dump(0, esp, 16, 8);
+      }
+      else
+      {
         palloc_free_page (kpage);
+      }
   }
 
   return success;
@@ -488,27 +573,37 @@ static bool install_page (void *upage, void *kpage, bool writable)
 ///             *argc = how many commands there are (including file name)
 /// Purpose: Takes a string and passes it to strtok_r to be split up and stored,
 ///          it also counts the number of arguments given
-static void GetCommand(const char *str, char** argv, int* argc)
-{
-  char* svp; //pointer to save strtok_r's position
-  char* arg; //arguments
-  char* strcp = NULL;
+// static void GetCommand(const char *str, char** argv, int* argc)
+// {
+//   /*
+//     char** list; 
 
-  strlcpy(strcp, str, PGSIZE);
+//   list = malloc(sizeof(char*)*number_of_row);
+
+//   for(i=0;i<number_of_row; i++) 
+//     list[i] = malloc(sizeof(char)*number_of_col); 
+//   */
+//   char* svp; //pointer to save strtok_r's position
+//   char* arg; //arguments
+//   char* strcp = NULL;
+
+//   //strcp = (char*)malloc(sizeof(str));
+
+//   strlcpy(strcp, str, PGSIZE);
   
-  argv[0] = strtok_r(strcp, " ", &svp); //file name
+//   argv[0] = strtok_r(strcp, " ", &svp); //file name
   
-  *argc = 1;
+//   *argc = 1;
 
-  arg = strtok_r(NULL, " ", &svp);
+//   arg = strtok_r(NULL, " ", &svp);
 
-  while(arg != NULL)
-  {
-    argv[*argc] = arg;
-    (*argc)++;
+//   while(arg != NULL)
+//   {
+//     argv[*argc] = arg;
+//     (*argc)++;
 
-    arg = strtok_r(NULL, " ", &svp);
-  }
-}
+//     arg = strtok_r(NULL, " ", &svp);
+//   }
+// }
 
 //--------------------------------------------------------------------
