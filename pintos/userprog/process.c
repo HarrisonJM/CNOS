@@ -464,6 +464,9 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
   if (kpage != NULL) 
   {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      //Stack is incremented DOWN.
+      //First values, size are unimportant
+      //padding to 4 afterwards will speed up execution
       if (success) 
       {
         int argc = 0; //records total size. -1 for indexing
@@ -499,9 +502,11 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         int i = argc;
         while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
         {
-          strlcpy(argv[i-1], arg, strlen(arg));
+          strlcpy(argv[i-1], arg, strlen(arg)); //issue copying strings in
           --i;
         }
+
+        ///////////////////////////////STACK STARTS HERE///////////////////////////////
 
         *esp = PHYS_BASE;
 
@@ -533,9 +538,8 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         *esp -= 4;
         *(int*)*esp = 0x0;
         
+        hex_dump(PHYS_BASE - 256, esp, 256, 1);
 
-
-        hex_dump(0, esp, 16, 8);
       }
       else
       {
@@ -565,45 +569,3 @@ static bool install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-//-------MY EXTRA FUNCTIONS HERE---------------
-
-/// Name: GetCommand
-/// Parameters: *str = the string to be split up
-///             **argv = all of the commands
-///             *argc = how many commands there are (including file name)
-/// Purpose: Takes a string and passes it to strtok_r to be split up and stored,
-///          it also counts the number of arguments given
-// static void GetCommand(const char *str, char** argv, int* argc)
-// {
-//   /*
-//     char** list; 
-
-//   list = malloc(sizeof(char*)*number_of_row);
-
-//   for(i=0;i<number_of_row; i++) 
-//     list[i] = malloc(sizeof(char)*number_of_col); 
-//   */
-//   char* svp; //pointer to save strtok_r's position
-//   char* arg; //arguments
-//   char* strcp = NULL;
-
-//   //strcp = (char*)malloc(sizeof(str));
-
-//   strlcpy(strcp, str, PGSIZE);
-  
-//   argv[0] = strtok_r(strcp, " ", &svp); //file name
-  
-//   *argc = 1;
-
-//   arg = strtok_r(NULL, " ", &svp);
-
-//   while(arg != NULL)
-//   {
-//     argv[*argc] = arg;
-//     (*argc)++;
-
-//     arg = strtok_r(NULL, " ", &svp);
-//   }
-// }
-
-//--------------------------------------------------------------------
