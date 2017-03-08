@@ -503,7 +503,7 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         char* temp;
 
         temp = palloc_get_page(0);
-        *temp = '\0'; 
+        *temp = '\0';  //free or alocate appropriately
 
         strlcpy((char*)&argv[argc][0], temp, 1); //copy file name into argv
 
