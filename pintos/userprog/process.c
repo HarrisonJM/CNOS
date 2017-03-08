@@ -494,51 +494,65 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
           }
         }
 
-        char argv[argc][maxsize];
+        char argv[argc + 1][maxsize];
         strlcpy (file_name, fn_copy, PGSIZE);
 
-        arg = strtok_r(file_name, " ", &svp);      
+        arg = strtok_r(file_name, " ", &svp);
 
         int i = argc;
+        char* temp;
+
+        temp = palloc_get_page(0);
+        *temp = '\0'; 
+
+        strlcpy((char*)&argv[argc][0], temp, 1); //copy file name into argv
+
+        strlcpy((char*)&argv[--i][0], arg, strlen(arg) + 1); //copy file name into argv
+
         while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
         {
-          strlcpy(argv[i-1], arg, strlen(arg)); //issue copying strings in
+          strlcpy((char*)&argv[i-1][0], arg, strlen(arg) + 1); //issue copying strings in
           --i;
         }
 
         ///////////////////////////////STACK STARTS HERE///////////////////////////////
 
         *esp = PHYS_BASE;
-
-        for(i = 0; i < argc-1; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
+        
+        uint32_t adresses[argc];
+        for(i = 0; i < argc; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
         {
-          int len = strlen(argv[i]) +1;
+          int len = strlen((char*)&argv[i][0]) +1;
           *esp -= len;
-          memcpy(*esp, fn_copy, len);
+          adresses[i] = *esp;
+          memcpy(*esp, (char*)&argv[i][0], len);
+          total_length += len;
         }
 
         *esp -= 4 - total_length % 4; //align
 
-        *esp -= 4;
-        *(int*)*esp = 0x0; //argv end null
-
         for(i = 0; i < argc; ++i) //push our pointers on
         {
           *esp -= 4;
-          *(char*)*esp = (char*)&argv[i];
+          *(uint32_t*)*esp = adresses[i];
         }
+
+        uint32_t tempesp = *esp;
+        printf("%x, %x", tempesp, *esp);
 
         //finally, push argv, argc and return address
         *esp -= 4;
-        *(char**)*esp = (char**)argv;
+        *(uint32_t*)*esp = tempesp; //ARGV ADDRESS
         
         *esp -= 4;
         *(int*)*esp = (int*)argc;
 
+        hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
+
         *esp -= 4;
         *(int*)*esp = 0x0;
-        
-        hex_dump(PHYS_BASE - 256, esp, 256, 1);
+
+        hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
 
       }
       else
