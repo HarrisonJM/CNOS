@@ -524,8 +524,12 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         {
           int len = strlen((char*)&argv[i][0]) +1;
           *esp -= len;
+<<<<<<< HEAD
           adresses[i] = *esp;
           memcpy(*esp, (char*)&argv[i][0], len);
+=======
+          memcpy(*esp, fn_copy, len);
+>>>>>>> 55dfb75791e770383512dd3f16c7e6779e4f6731
           total_length += len;
         }
 
