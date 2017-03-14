@@ -282,7 +282,8 @@ thread_tid (void)
 }
 
 /* Deschedules the current thread and destroys it.  Never
-   returns to the caller. */
+   returns to the caller. If it is defined as a user prog,
+   closes that */
 void
 thread_exit (void) 
 {
@@ -470,6 +471,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  /* My stuff*/
+  // list_init (&t->children);
+  // t->parent = NULL;
+
   //t->is_kernel = is_kernel;
 
   old_level = intr_disable ();
@@ -591,3 +596,24 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Get the thread by its tid */
+struct thread* getThreadByID (tid_t id)
+{
+  struct list_elem *element;
+  struct thread *t;
+
+  element = list_tail (&all_list);
+
+  while ((element = list_prev (element)) != list_head (&all_list))
+  {
+      t = list_entry (element, struct thread, allelem);
+
+      if (t->tid == id && t->status != THREAD_DYING)
+      {
+        return t;
+      }
+  }
+
+  return NULL;
+}

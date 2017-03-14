@@ -80,8 +80,24 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+/*
+    A thread needs knowledge of its children. Every child process is a 
+    thread with the possibility of its own children. Every thread needs 
+    knowledge of its children.
+
+    Every thread needs a list of its children. 
+    Each thread needs the status of its children. 
+    Each child thread needs it's parents tid
+
+    init list. all new process spawned from parent
+    should be pushed onto the list.
+
+    Do I even need to do this? 
+
+*/
 struct thread
-  {
+{
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
@@ -92,15 +108,31 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    tid_t parent; //parents ID
+    int isChild; //check if thread is child
       
-#ifdef USERPROG
+#ifdef USERPROG //for user run programs and children
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t *pagedir;                 /* Page directory. */
+
+    // tid_t parentID; /*If parent should be NULL*/
+    // struct list children;
+    // //struct of children. pid of -1 indicates launch failure
+    // //holds the elemnts childElements in struct child
 #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-  };
+};
+
+// struct child
+// {
+//   pid_t childID;
+
+//   struct list_elem childElements;
+// };
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -137,5 +169,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+struct thread* getThreadByID (tid_t id);
 
 #endif /* threads/thread.h */

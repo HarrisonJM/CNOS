@@ -53,8 +53,7 @@ file_close (struct file *file)
 }
 
 /* Returns the inode encapsulated by FILE. */
-struct inode *
-file_get_inode (struct file *file) 
+struct inode* file_get_inode (struct file *file) 
 {
   return file->inode;
 }
@@ -91,7 +90,7 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
    not yet implemented.)
    Advances FILE's position by the number of bytes read. */
 off_t
-file_write (struct file *file, const void *buffer, off_t size) 
+file_write (struct file *file, const void *buffer, off_t size)
 {
   off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
   file->pos += bytes_written;
@@ -128,10 +127,10 @@ file_deny_write (struct file *file)
 /* Re-enables write operations on FILE's underlying inode.
    (Writes might still be denied by some other file that has the
    same inode open.) */
-void
-file_allow_write (struct file *file) 
+void file_allow_write (struct file *file) 
 {
   ASSERT (file != NULL);
+  
   if (file->deny_write) 
     {
       file->deny_write = false;

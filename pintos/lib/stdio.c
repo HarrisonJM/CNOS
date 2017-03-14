@@ -154,8 +154,7 @@ static void format_string (const char *string, int length,
                            void (*output) (char, void *), void *aux);
 
 void
-__vprintf (const char *format, va_list args,
-           void (*output) (char, void *), void *aux)
+__vprintf (const char *format, va_list args, void (*output) (char, void *), void *aux)
 {
   for (; *format != '\0'; format++)
     {

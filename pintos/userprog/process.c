@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+//pintos --gdb --filesys-size=2 -p ../../examples/halt -a echo -- -f -q run 'echo x y'
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 //static void GetCommand(const char *str, char** argv, int* argc);
@@ -54,6 +56,14 @@ tid_t process_execute (const char *file_name)
     return tid;
   }
 
+  // //we need to add the child here
+  // struct thread *currentThread = thread_current();
+  // struct child ch = (struct child)calloc(1, sizeof * ch);
+
+  // if(ch != NULL)
+  // {
+  //   ch->childID = tid;
+  // }
 
   return tid;
 }
@@ -103,8 +113,17 @@ static void start_process (void *file_name_) //we start here
    does nothing. */
 int process_wait (tid_t child_tid UNUSED) 
 {
-    // FIXME: @bgaster --- quick hack to make sure processes execute!
-  for(;;) ;
+  struct thread *t = getThreadByID(child_tid);
+
+  if(t->isChild != 1)
+  {
+    return -1; //not a child process. Error
+  }
+
+  while(t->status !=  THREAD_DYING);
+  {
+    t = getThreadByID(child_tid);
+  }
     
   return -1;
 }
@@ -342,6 +361,7 @@ bool load (const char *file_name, void (**eip) (void), void **esp)//////////////
 
  done:
   /* We arrive here whether the load is successful or not. */
+  
   file_close (file);
   return success;
 }
@@ -454,6 +474,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
+   ///////NEED TO MOVE INTO FUNCITONS!!////
 static bool setup_stack (void **esp, char* file_name)///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 {
   uint8_t *kpage;
@@ -495,27 +516,28 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         }
 
         char argv[argc + 1][maxsize];
+
         strlcpy (file_name, fn_copy, PGSIZE);
 
-        arg = strtok_r(file_name, " ", &svp);
+        //palloc_free_page(fn_copy);
 
+
+        arg = strtok_r(file_name, " ", &svp); //command name
+
+        //palloc_free_page(file_name);
+        
         int i = argc;
-        char* temp;
 
-        temp = palloc_get_page(0);
-        *temp = '\0';  //free or alocate appropriately
-
-        strlcpy((char*)&argv[argc][0], temp, 1); //copy file name into argv
-
+        strlcpy((char*)&argv[argc][0], "\0", 1); //place a termianting character at the end
         strlcpy((char*)&argv[--i][0], arg, strlen(arg) + 1); //copy file name into argv
 
         while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
         {
-          strlcpy((char*)&argv[i-1][0], arg, strlen(arg) + 1); //issue copying strings in
+          strlcpy((char*)&argv[i-1][0], arg, strlen(arg) + 1); //copy strings into argv
           --i;
         }
 
-        ///////////////////////////////STACK STARTS HERE///////////////////////////////
+        ///////////////////////////////STACK STARTS HERE///////////////////////////////        
 
         *esp = PHYS_BASE;
         
@@ -538,21 +560,18 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         }
 
         uint32_t tempesp = *esp;
-        printf("%x, %x", tempesp, *esp);
 
         //finally, push argv, argc and return address
         *esp -= 4;
         *(uint32_t*)*esp = tempesp; //ARGV ADDRESS
         
         *esp -= 4;
-        *(int*)*esp = (int*)argc;
-
-        hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
+        *(int*)*esp = (int*)argc; //push argc on
 
         *esp -= 4;
-        *(int*)*esp = 0x0;
+        *(int*)*esp = 0x0; //return address
 
-        hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
+        //hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
 
       }
       else
@@ -583,3 +602,8 @@ static bool install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
+void StackHandler(void* esp)
+{
+  
+
+}

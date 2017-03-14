@@ -61,11 +61,10 @@
           retval;                                               \
         })
 
-void
-halt (void) 
+void halt (void) 
 {
   syscall0 (SYS_HALT);
-  NOT_REACHED ();
+  NOT_REACHED (); //Means we shouldn't ever reach this. If executed, panics.
 }
 
 void
