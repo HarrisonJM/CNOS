@@ -22,7 +22,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-//static void GetCommand(const char *str, char** argv, int* argc);
+void StackHandlerAndArgumentExtractor(void* esp, char* file_name, int argc, int maxsize);
+//char* ExtractCommands(char* file_name, int argc, int maxsize);
+int CountAndSizeArguments(char* file_name, int* argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -474,8 +476,9 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-   ///////NEED TO MOVE INTO FUNCITONS!!////
-static bool setup_stack (void **esp, char* file_name)///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////NEED TO MOVE INTO FUNCITONS!!////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+static bool setup_stack (void **esp, char* file_name)
 {
   uint8_t *kpage;
   bool success = false;
@@ -490,88 +493,36 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
       //padding to 4 afterwards will speed up execution
       if (success) 
       {
-        int argc = 0; //records total size. -1 for indexing
-        size_t maxsize, total_length = 0;
+        ///////////////////////////////////////////////////////////////
+        int argc = 0; //records total size.
+
+        size_t maxsize;
         char *fn_copy = palloc_get_page (0);
-        char *arg;
-        char *svp;
+		char* argv;
+        //char *arg;
+        //char *svp;
 
         if (fn_copy == NULL) //move this into function?
         {
-          return TID_ERROR;
+          return -1;
         }
+
         strlcpy (fn_copy, file_name, PGSIZE);
 
-        arg = strtok_r(file_name, " ", &svp);
-        ++argc;
-        maxsize = strlen(arg) +1;
+		//count arguments and get size of largest argument
+        maxsize = CountAndSizeArguments(file_name, &argc);
 
-        while((arg = strtok_r(NULL, " ", &svp))) //find largest argument and count arguments
-        {
-          ++argc; //we need the number of arguments we have
-          if((strlen(arg) +1) > maxsize)
-          {
-              maxsize = strlen(arg) +1;
-          }
-        }
+		strlcpy (file_name, fn_copy, PGSIZE);
 
-        char argv[argc + 1][maxsize];
-
-        strlcpy (file_name, fn_copy, PGSIZE);
-
-        //palloc_free_page(fn_copy);
-
-
-        arg = strtok_r(file_name, " ", &svp); //command name
-
-        //palloc_free_page(file_name);
-        
-        int i = argc;
-
-        strlcpy((char*)&argv[argc][0], "\0", 1); //place a termianting character at the end
-        strlcpy((char*)&argv[--i][0], arg, strlen(arg) + 1); //copy file name into argv
-
-        while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
-        {
-          strlcpy((char*)&argv[i-1][0], arg, strlen(arg) + 1); //copy strings into argv
-          --i;
-        }
+		//argv = ExtractCommands(file_name, argc, maxsize);
 
         ///////////////////////////////STACK STARTS HERE///////////////////////////////        
 
         *esp = PHYS_BASE;
-        
-        uint32_t adresses[argc];
-        for(i = 0; i < argc; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
-        {
-          int len = strlen((char*)&argv[i][0]) +1;
-          *esp -= len;
-          adresses[i] = *esp;
-          memcpy(*esp, (char*)&argv[i][0], len);
-          total_length += len;
-        }
 
-        *esp -= 4 - total_length % 4; //align
+		StackHandlerAndArgumentExtractor(*esp, file_name, argc, maxsize);
 
-        for(i = 0; i < argc; ++i) //push our pointers on
-        {
-          *esp -= 4;
-          *(uint32_t*)*esp = adresses[i];
-        }
-
-        uint32_t tempesp = *esp;
-
-        //finally, push argv, argc and return address
-        *esp -= 4;
-        *(uint32_t*)*esp = tempesp; //ARGV ADDRESS
-        
-        *esp -= 4;
-        *(int*)*esp = (int*)argc; //push argc on
-
-        *esp -= 4;
-        *(int*)*esp = 0x0; //return address
-
-        //hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);
+		hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);        
 
       }
       else
@@ -602,8 +553,113 @@ static bool install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-void StackHandler(void* esp)
+
+
+int CountAndSizeArguments(char* file_name, int* argc)
 {
-  
+	char *arg;
+	char *svp;
+
+	int maxsize;
+
+	arg = strtok_r(file_name, " ", &svp);
+	(*argc)++;
+
+	maxsize = strlen(arg) +1;
+
+	while((arg = strtok_r(NULL, " ", &svp))) //find largest argument and count arguments
+	{
+		(*argc)++; //we need the number of arguments we have
+
+		if((strlen(arg) +1) > maxsize)
+		{
+			maxsize = strlen(arg) +1;
+		}
+	}
+
+	return maxsize;
+}
+
+void StackHandlerAndArgumentExtractor(void* esp, char* file_name, int argc, int maxsize)
+{
+	size_t total_length = 0;
+	int i = argc;
+	char* arg;
+	char* svp;
+	char argv[argc + 1][maxsize];
+
+	arg = strtok_r(file_name, " ", &svp); //command name        
+
+	strlcpy((char*)&argv[argc][0], "\0", 1); //place a termianting character at the end
+	strlcpy((char*)&argv[--i][0], arg, strlen(arg) + 1); //copy file name into argv
+
+	while((arg = strtok_r(NULL, " ", &svp))) //stores arguments backwards for later
+	{
+		strlcpy((char*)&argv[i-1][0], arg, strlen(arg) + 1); //copy strings into argv
+		--i;
+	}
+
+	uint32_t adresses[argc];
+	for(i = 0; i < argc; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
+	{
+		int len = strlen((char*)&argv[i][0]) +1;
+		
+		esp -= len;
+		adresses[i] = esp;
+		memcpy(esp, (char*)&argv[i][0], len);
+		total_length += len;
+	}
+
+	esp -= 4 - total_length % 4; //align
+
+	for(i = 0; i < argc; ++i) //push our pointers on
+	{
+		esp -= 4;
+		*(uint32_t*)esp = adresses[i];
+	}
+
+	uint32_t tempesp = esp;
+
+	//finally, push argv, argc and return address
+	esp -= 4;
+	*(uint32_t*)esp = tempesp; //ARGV ADDRESS
+	
+	esp -= 4;
+	*(int*)esp = (int*)argc; //push argc on
+
+	esp -= 4;
+	*(int*)esp = 0x0; //return address
 
 }
+
+		// uint32_t adresses[argc];
+        // for(i = 0; i < argc; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
+        // {
+        //   int len = strlen((char*)&argv[i][0]) +1;
+        //   *esp -= len;
+        //   adresses[i] = *esp;
+        //   memcpy(*esp, (char*)&argv[i][0], len);
+        //   total_length += len;
+        // }
+
+        // *esp -= 4 - total_length % 4; //align
+
+        // for(i = 0; i < argc; ++i) //push our pointers on
+        // {
+        //   *esp -= 4;
+        //   *(uint32_t*)*esp = adresses[i];
+        // }
+
+        // uint32_t tempesp = *esp;
+
+        // //finally, push argv, argc and return address
+        // *esp -= 4;
+        // *(uint32_t*)*esp = tempesp; //ARGV ADDRESS
+        
+        // *esp -= 4;
+        // *(int*)*esp = (int*)argc; //push argc on
+
+        // *esp -= 4;
+        // *(int*)*esp = 0x0; //return address
+
+        // //hex_dump(PHYS_BASE - 256, *esp - 128, 256, 1);

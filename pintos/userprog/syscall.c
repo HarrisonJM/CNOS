@@ -8,17 +8,13 @@
 #include "devices/shutdown.h"
 #include "lib/stdio.h"
 #include "devices/input.h"
-#include "userprog/process.h"
 
 #include "threads/malloc.h" //void* calloc (size_t a, size_t b) 
 
-#define ARG0 0 //system call number (0)
-#define ARG1 1
-#define ARG2 2
-#define ARG3 3
-#define ARG4 4
 
 struct list openfilelist;
+
+//struct lock sysCallLock; //data lock for system calls
 
 /* 
     adds open files to a list of open files
@@ -75,16 +71,15 @@ void syscall_init (void)
 }
 
 /*
-    Checks for a valid user pointer. 
-    This has probably broken everything
+    Checks for a valid user pointer
 */
-static uint32_t load_stack(struct intr_frame *f, int offset)
+static uint32_t load_stack(struct intr_frame *f, int offset) //dunno what this does but I hate it
 {
-    bool check = (f->esp + offset) < 0xc0000000; //true if pointer is less than stack
+    bool check = f->esp + offset < 0xc0000000; //true if pointer is less than stack
 
     switch(check)
     {
-        case 1:
+        case 1: 
             return *((uint32_t*)(f->esp + offset));
             break;
         default:
@@ -110,46 +105,46 @@ static void syscall_handler (struct intr_frame *f) // UNUSED)
 
     //int sysnum = *esp;
 
-    switch(load_stack(f, ARG0))
+    switch(*esp)
     {
-        case SYS_HALT: //0
+        case SYS_HALT: //0, works!
             halt();
             break;
         case SYS_EXIT: //1
-            exit(load_stack(f, ARG1));
+            exit(*(esp+1));
             break;
         case SYS_EXEC: //2
-            f->eax = exec(load_stack(f, ARG1));
+            f->eax = exec(*(esp+1));
             break;
         case SYS_WAIT: //3
-            f->eax = wait(load_stack(f, ARG1));
+            f->eax = wait(*(esp+1));
             break;
          case SYS_CREATE: //4
-            f->eax = create ((char*)load_stack(f, ARG1), load_stack(f, ARG2));
+            f->eax = create ((char*)*(esp+1), *(esp+2));
             break;
          case SYS_REMOVE: //5
-            f->eax = remove ((char*)load_stack(f, ARG1));
+            f->eax = remove ((char*)*(esp+1));
             break;
          case SYS_OPEN: //6
-            f->eax = open((char*)load_stack(f, ARG1)); 
+            f->eax = open((char*)*(esp+1));
             break;
          case SYS_FILESIZE: //7
-            f->eax = filesize(load_stack(f, ARG1));
+            f->eax = filesize(*(esp+1));
             break;
          case SYS_READ: //8
-            f->eax = read(load_stack(f, ARG1), (void*)load_stack(f, ARG2), load_stack(f, ARG3));            
+            f->eax = read(*(esp+1), (void*)*(esp+2), *(esp+3));            
             break;
          case SYS_WRITE: //9 
-            f->eax = write(load_stack(f, ARG1), (void*)load_stack(f, ARG2), load_stack(f, ARG3));
+            f->eax = write(*(esp+1), (void*)*(esp+2), *(esp+3));
             break;
          case SYS_SEEK: //10
-            seek(load_stack(f, ARG1), load_stack(f, ARG2));
+            seek(*(esp+1), *(esp+2));
             break;
          case SYS_TELL: //11
-            f->eax = tell (load_stack(f, ARG1));
+            f->eax = tell (*(esp+1));
             break;
          case SYS_CLOSE: //12
-            close(load_stack(f, ARG1));
+            close(*(esp+1));
             break;
         default:
             printf("Probably an invalid pointer.\n Don't know how to handle this");
@@ -222,11 +217,11 @@ bool create (const char *file, unsigned initial_size) //4
 */
 bool remove (const char *file) //5
 {
-    bool success = 0;
+        bool success = 0;
 
-    success = filesys_remove(file);
+        success = filesys_remove(file);
 
-    return success;
+        return success;
 }
 
 /*
