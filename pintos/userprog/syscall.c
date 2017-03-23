@@ -399,7 +399,7 @@ void close (int fd) //12
         if (of->_fd == fd)
         {
             list_remove (currentelem);
-            file_close (of->_file);
+            file_close (of->_file); //Panic here due to corrupted inode open counter
             free (of);
             return;
         }
