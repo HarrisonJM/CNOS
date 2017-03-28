@@ -6,6 +6,8 @@
 #include "filesys/filesys.h"
 #include "lib/kernel/list.h"
 
+#define PHYS_BASE 0xc0000000
+
 /*  
     struct to hold open files
     typedef struct openfiles of

@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -8,13 +9,17 @@
 #include "devices/shutdown.h"
 #include "lib/stdio.h"
 #include "devices/input.h"
+#include "threads/synch.h"
+#include "threads/palloc.h"
+#include <string.h>
+#include "process.h"
+#include "threads/malloc.h"
 
-#include "threads/malloc.h" //void* calloc (size_t a, size_t b) 
 
 
 struct list openfilelist;
 
-//struct lock sysCallLock; //data lock for system calls
+struct lock FSLock; //data lock for system calls
 
 /* 
     adds open files to a list of open files
@@ -67,7 +72,7 @@ void syscall_init (void)
     intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
     list_init (&openfilelist);
 
-    //lock_init(&sysCallLock);
+    lock_init(&FSLock);
 }
 
 /*
@@ -75,35 +80,41 @@ void syscall_init (void)
 */
 static uint32_t load_stack(struct intr_frame *f, int offset) //dunno what this does but I hate it
 {
-    bool check = f->esp + offset < 0xc0000000; //true if pointer is less than stack
+    bool check = f->esp + offset < PHYS_BASE; //true if pointer is less than stack, so less than PHYSBASE
 
-    switch(check)
+    if(check == true)
     {
-        case 1: 
-            return *((uint32_t*)(f->esp + offset));
-            break;
-        default:
-            return -1;
-            break;
+        return f->esp + offset;
+    }
+    else
+    {
+        return PHYS_BASE;
     }
 }
 
 //our part 2
 /*
     System Call handler.
-        Arguments are given in order.
+        Arguments are given in order. on the stack
 */
 static void syscall_handler (struct intr_frame *f) // UNUSED)
 {
-    uint32_t *esp;
-    esp = f->esp;
+    uint32_t *esp = load_stack(f, 0), //syscall
+    arg1 = load_stack(f, 1), //syscall argguments
+    arg2 = load_stack(f, 2),
+    arg3 = load_stack(f, 3);
 
-    //printf ("System Call!\n");
-    //hex_dump((int)esp, esp, 256, 1);
+    bool broke = 0;
 
-    printf("syscall: %d\n", *esp); //print out system call
+    //esp = load_stack(f, 0); //get sys call
 
-    //int sysnum = *esp;
+    //printf("syscall: %d\n", *esp); //print out system call
+
+    if(esp == PHYS_BASE)
+    {   
+        printf("INVALID USER POINTER!");
+        exit(-1);
+    }
 
     switch(*esp)
     {
@@ -111,45 +122,121 @@ static void syscall_handler (struct intr_frame *f) // UNUSED)
             halt();
             break;
         case SYS_EXIT: //1
-            exit(*(esp+1));
+
+            if(arg1 != PHYS_BASE)
+                exit(*(esp+1));
+            else
+                broke = 1;
+            
             break;
         case SYS_EXEC: //2
-            f->eax = exec(*(esp+1));
+            
+            if(arg1 != PHYS_BASE)
+                f->eax = exec((char*)*(esp+1));
+            else
+                broke = 1;
+            
             break;
         case SYS_WAIT: //3
-            f->eax = wait(*(esp+1));
+
+            if(arg1 != PHYS_BASE)
+                f->eax = wait(*(esp+1));
+            else
+                broke = 1;
+            
             break;
-         case SYS_CREATE: //4
-            f->eax = create ((char*)*(esp+1), *(esp+2));
+         case SYS_CREATE: //4    
+
+            if((arg1 != PHYS_BASE) && (arg2 != PHYS_BASE))
+                f->eax = create ((char*)*(esp+1), *(esp+2));
+            else
+                broke = 1;
+                        
             break;
          case SYS_REMOVE: //5
-            f->eax = remove ((char*)*(esp+1));
+
+            if(arg1 != PHYS_BASE)
+                f->eax = remove ((char*)*(esp+1));
+            else
+                broke = 1;
+
             break;
          case SYS_OPEN: //6
-            f->eax = open((char*)*(esp+1));
+
+            if(arg1 != PHYS_BASE)
+                f->eax = open((char*)*(esp+1));
+            else
+                broke = 1;
+
             break;
          case SYS_FILESIZE: //7
-            f->eax = filesize(*(esp+1));
+            
+            if(arg1 != PHYS_BASE)            
+                f->eax = filesize(*(esp+1));
+            else
+                broke = 1;
+
             break;
          case SYS_READ: //8
-            f->eax = read(*(esp+1), (void*)*(esp+2), *(esp+3));            
+            
+            if((arg1 != PHYS_BASE) && (arg2 != PHYS_BASE) && (arg3 != PHYS_BASE))
+                f->eax = read(*(esp+1), (void*)*(esp+2), *(esp+3));
+            else
+                broke = 1;
+
             break;
          case SYS_WRITE: //9 
-            f->eax = write(*(esp+1), (void*)*(esp+2), *(esp+3));
+
+            if((arg1 != PHYS_BASE) && (arg2 != PHYS_BASE) && (arg3 != PHYS_BASE))
+                f->eax = write(*(esp+1), (void*)*(esp+2), *(esp+3));
+            else
+                broke = 1;
+
             break;
          case SYS_SEEK: //10
-            seek(*(esp+1), *(esp+2));
+
+            if((arg1 != PHYS_BASE) && (arg2 != PHYS_BASE))
+                seek(*(esp+1), *(esp+2));
+            else
+                broke = 1;
+
             break;
          case SYS_TELL: //11
-            f->eax = tell (*(esp+1));
+            
+            if(arg1 != PHYS_BASE)
+                f->eax = tell (*(esp+1));
+            else
+                broke = 1;
+
             break;
          case SYS_CLOSE: //12
-            close(*(esp+1));
+
+            if(arg1 != PHYS_BASE)
+                close(*(esp+1));
+            else
+                broke = 1;
+
             break;
         default:
-            printf("Probably an invalid pointer.\n Don't know how to handle this");
+
+            printf("\nINVALID SYSCALL! %d ", (int)*esp);
+            exit(-1);
             break;
     }
+
+    if(broke == 1)
+    {
+        printf("\nUSER POINTER ERROR!\n %d", (int)*esp);
+
+        if(lock_held_by_current_thread(&FSLock))
+        {
+            lock_release(&FSLock);
+        }
+
+        exit(-1);
+    }
+
+    return;
 }
 
 /*Halts, powers off, the system*/
@@ -164,9 +251,23 @@ void halt (void) //0
     pid_t = user process
 */
 void exit (int status) //1
-{
+{   
+    char* progName;
+    char* temp;
+    char* svp;
+
     struct thread *currentThread = thread_current();
-    printf ("\n%s: exit(%d)\n", currentThread->name, status);
+
+    temp = palloc_get_page(1);
+
+    strlcpy (temp, currentThread->name, sizeof(temp)+1);
+
+    progName = strtok_r(temp, " ", &svp);
+
+    printf ("%s: exit(%d)\n", progName, status);
+
+    palloc_free_page (temp);
+
     thread_exit();
 }
 
@@ -207,7 +308,9 @@ bool create (const char *file, unsigned initial_size) //4
     bool success = 0;
 
     //bool filesys_create (const char *name, off_t initial_size) 
+    lock_acquire(&FSLock);
     success = filesys_create(file, initial_size);
+    lock_release(&FSLock);
 
     return success;
 }
@@ -217,11 +320,13 @@ bool create (const char *file, unsigned initial_size) //4
 */
 bool remove (const char *file) //5
 {
-        bool success = 0;
+    bool success = 0;
 
-        success = filesys_remove(file);
+    lock_acquire(&FSLock);
+    success = filesys_remove(file);
+    lock_release(&FSLock);
 
-        return success;
+    return success;
 }
 
 /*
@@ -231,6 +336,8 @@ bool remove (const char *file) //5
 int open (const char *file) //6
 {
     struct file *f;
+
+    lock_acquire(&FSLock);
 
     if(file != NULL) //null string
     {
@@ -249,9 +356,11 @@ int open (const char *file) //6
             return -1;
         }
 
+        lock_release(&FSLock);
         return fileo._fd; //will always increment above 0 and 1 which are reserved
     }
 
+    lock_release(&FSLock);
     return -1;
 }
 
@@ -264,6 +373,8 @@ int filesize (int fd) //7
 
     struct file* f;
 
+    lock_acquire(&FSLock);
+
     f = GetOpenFile(fd);
 
     if(f != NULL)
@@ -272,6 +383,7 @@ int filesize (int fd) //7
         return size;
     }
 
+    lock_release(&FSLock);
     return size;
 }
 
@@ -284,6 +396,7 @@ int read (int fd, void *buffer, unsigned size) //8
 {
     struct file *f;
 
+    lock_acquire(&FSLock);
     if(fd == STDIN_FILENO) //read from keyboard
     {
         unsigned i = 0;
@@ -295,6 +408,7 @@ int read (int fd, void *buffer, unsigned size) //8
             ++i;
         }
 
+        lock_release(&FSLock);
         return size - i; //returns 0 if end of file
 
     }
@@ -302,10 +416,12 @@ int read (int fd, void *buffer, unsigned size) //8
     {
         f = GetOpenFile(fd);
 
+        lock_release(&FSLock);
         return file_read(f, buffer, size); //read from file
     }
     else
     {
+        lock_release(&FSLock);
         return -1; //error
     }
 }
@@ -318,6 +434,8 @@ int read (int fd, void *buffer, unsigned size) //8
 int write (int fd, const void *buffer, unsigned size) //9
 {
     struct file *f;
+
+    lock_acquire(&FSLock);
 
     switch(fd)
     {
@@ -333,15 +451,18 @@ int write (int fd, const void *buffer, unsigned size) //9
 
             if(f != NULL)
             {
+                lock_release(&FSLock);
                 return file_write(f, buffer, size);
             }
             else //failed to find file
             {
+                lock_release(&FSLock);
                 return -1;
             }
             break;
     }
 
+    lock_release(&FSLock);
     return size;
 }
 
@@ -351,6 +472,8 @@ int write (int fd, const void *buffer, unsigned size) //9
 void seek (int fd, unsigned position) //10
 {
     struct file* f;
+    
+    lock_acquire(&FSLock);
 
     f = GetOpenFile(fd);
 
@@ -358,6 +481,9 @@ void seek (int fd, unsigned position) //10
     {
         file_seek(f, position);
     }
+
+    lock_release(&FSLock);
+    return;
 }
 
 /*
@@ -369,14 +495,18 @@ unsigned tell (int fd) //11
 
     struct file* f;
 
+    lock_acquire(&FSLock);
+
     f = GetOpenFile(fd);
 
     if(f != NULL)
     {
         pos = (unsigned)file_tell (f);
+        lock_release(&FSLock);
         return pos;
     }
 
+    lock_release(&FSLock);
     return 0;
 }
 
@@ -389,6 +519,8 @@ void close (int fd) //12
 
     struct openfiles *of; 
 
+    lock_acquire(&FSLock);
+
     currentelem = list_end (&openfilelist);
 
     while (currentelem != list_head (&openfilelist))
@@ -398,14 +530,16 @@ void close (int fd) //12
 
         if (of->_fd == fd)
         {
-            list_remove (currentelem);
             file_close (of->_file); //Panic here due to corrupted inode open counter
+            list_remove (currentelem);
             free (of);
+            lock_release(&FSLock);
             return;
         }
 
         currentelem = prevelem;
     }
 
+    lock_release(&FSLock);
     return;
 }
