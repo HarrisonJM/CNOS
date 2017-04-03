@@ -517,7 +517,7 @@ void close (int fd) //12
 {
     struct list_elem *currentelem, *prevelem;
 
-    struct openfiles *of; 
+    struct openfiles *of;
 
     lock_acquire(&FSLock);
 
@@ -532,7 +532,6 @@ void close (int fd) //12
         {
             file_close (of->_file); //Panic here due to corrupted inode open counter
             list_remove (currentelem);
-            free (of);
             lock_release(&FSLock);
             return;
         }
