@@ -47,7 +47,7 @@ tid_t process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  //pass in program name and arguments seperately
+  //pass entire command as thread name, and pass in filename along with arguments
   tid = thread_create (fn_copy, PRI_DEFAULT, start_process, fn_copy); //we go into start_process
 
   if (tid == TID_ERROR)
@@ -113,14 +113,14 @@ static void start_process (void *file_name_) //we start here
    does nothing. */
 int process_wait (tid_t child_tid UNUSED) 
 {
-  struct thread *t = getThreadByID(child_tid);
+  struct thread *t = getThreadByID(child_tid); //get thread
 
   if(t->isChild != 1)
   {
     return -1; //not a child process. Error
   }
 
-  while(t->status !=  THREAD_DYING);
+  while(t->status !=  THREAD_DYING); //loop until thread is dying
   {
     t = getThreadByID(child_tid);
   }
@@ -520,7 +520,7 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
         strlcpy (file_name, fn_copy, PGSIZE);
 
         //palloc_free_page(fn_copy);
-
+        
 
         arg = strtok_r(file_name, " ", &svp); //command name
 

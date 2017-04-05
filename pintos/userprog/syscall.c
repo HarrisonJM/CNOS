@@ -15,8 +15,6 @@
 #include "process.h"
 #include "threads/malloc.h"
 
-
-
 struct list openfilelist;
 
 struct lock FSLock; //data lock for system calls
@@ -118,7 +116,7 @@ static void syscall_handler (struct intr_frame *f) // UNUSED)
 
     switch(*esp)
     {
-        case SYS_HALT: //0, works!
+        case SYS_HALT: //0
             halt();
             break;
         case SYS_EXIT: //1
@@ -305,11 +303,13 @@ int wait (pid_t pid) //3
 */
 bool create (const char *file, unsigned initial_size) //4
 {
-    bool success = 0;
+    bool success = 0; 
 
     //bool filesys_create (const char *name, off_t initial_size) 
     lock_acquire(&FSLock);
+
     success = filesys_create(file, initial_size);
+
     lock_release(&FSLock);
 
     return success;
@@ -323,7 +323,9 @@ bool remove (const char *file) //5
     bool success = 0;
 
     lock_acquire(&FSLock);
+
     success = filesys_remove(file);
+
     lock_release(&FSLock);
 
     return success;
@@ -380,6 +382,7 @@ int filesize (int fd) //7
     if(f != NULL)
     {
         size = file_length(f);
+        lock_release(&FSLock);
         return size;
     }
 
@@ -388,9 +391,9 @@ int filesize (int fd) //7
 }
 
 /*
-    Reads from fd 
-    into the buf 
-    for the amount of size
+    Reads from the fd 
+    into the buffer pointer
+    for size amount
 */
 int read (int fd, void *buffer, unsigned size) //8
 {
@@ -537,7 +540,9 @@ void close (int fd) //12
         }
 
         currentelem = prevelem;
-    }
+    }    Reads from the fd 
+    into the buffer pointer
+    for size amount
 
     lock_release(&FSLock);
     return;

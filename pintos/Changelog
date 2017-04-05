@@ -1,0 +1,118 @@
+Harrison Marcks, 14024424
+William Wilkins, 14027210
+
+Below details changes made to the Pintos code and 
+at what line numbers those changes begin. Describing 
+any changes to the original code. 
+(Line numbers refer to my code)
+	
+
+userprog/
+
+	thread.h
+		 84 -  96 -> Comments on how child processes might be implemented
+		110 - 111 -> Very rudimentary attempt at keeping track of child processes in a very simplistic way
+					 to try and get the syscalls that required them working to some degree. However only
+					 children kept track of their parents, as opposed to parents also keeping track of their
+					 children. Also contained a simple flag to determine if the thread was a child or not.
+
+	process.c
+		51 		  -> passed fn_copy into thread_create instead of file_name to eliminate the race conditions
+		
+		114 - 129 -> Very rudimentary attempt at child processes.
+					 finds the thread by its ID, checks if it's 
+					 actually a child using a setter in the thread struct,
+					 then loops until that threads state is set to
+					 THREAD_DYING
+					 
+		258 - 268 -> A safe char* (safecp) is setup so that the file name can be extracted from file_name
+					 without destroying the original pointer which needs to passed into setup_stack for pusing onto
+					 the stack
+					 
+		354		  -> Passing safecp into setup_stack which contains the file name and any arguments
+		
+		493 - 573 -> Added everything required for pushing onto the stack. First we count how many arguments we have 
+					(including filename) and determine the length of the longest argument. This information is then used 
+					to create a new char* array (argv) that will contain all of our arguments.
+					
+					Next we make a new copy of our command line, and start looping over it to extract all of our command 
+					line arguments and store them in argv, taking care to terminate each string as they are pushed on.
+					
+					Finally we setup our stack pointer by setting it to PHYS_BASE and we can start pushing our information onto
+					the stack as outlined in the pintos documentation.
+					
+					First we push the actual data onto the stack (filename, arguments). We decrement the pointer by the length
+					of each argument, and record the dress it was pushed on in. We memcpy each argument into place. And we keep
+					a running total of the total length of the data as we're pusing it on. This let's us align it on the line 
+					following this by finding the modulos 4 of it and taking that away from 4.
+					
+					Next we push the addresses of the arguments in the stack onto the stack; still taking care to decrement 
+					the pointer each time. We take a temporary pointer which we need to push onto the stack for the address 
+					of the first argument. Then, finally, we push argc and the return address, which in this case is always
+					0x0.
+					
+	syscall.h
+		
+					This file contains every single function prototype defined in syscall.c. It also contains the openfiles struct
+					used as a reference for open files. It contained a pointer to the open file and a File descriptor for referencing
+					it. Along with a list element struct so it cna be used in lists.
+					
+	syscall.c
+		
+					This file contains all the defintions of the system call functions used by Pintos. It also contains other 
+					functions and definitions that that are either required for parts to work or to cut down on code by moving
+					things into "helper" functions. 
+					
+					struct list openfilelist is the list used to hold every single open file. 
+					struct lock FSLock is used to lock the filesystem down so that it can only be used by the current thread.
+					
+					First starting this file we edited the syscall_handler to be ablle to actual take system calls off the stack
+					and deal with them accordingly. The order they were implemented in was:
+					
+					The system calls that didn't require keeping track of all open files and knowledge of threading were developed first.
+					When we got to the open() call, we realised we'd need to implement lists in order to fully implement that and the 
+					other calls. This is when we developed our "helper" functions.
+					
+					In open() we started by trying to think of a way to keep track of the file descriptors. The idea we came up with
+					was to have our first helper function contain a static int that starts counting at 1 (so as not to interfere with
+					STDIN_FILENO. It simply starts at 1 and increments every time it's called and returns that number as the file 
+					descriptor. The next step was to create an "open file". We do this by creating a temporary openfiles struct, 
+					populate it with the file descriptor and a pointer to the open file and pass that AddOpenFiles which pushes it
+					onto the global list openfileist.
+					
+					The next issue we had to solve was that of retreiving files. So we created a new function GetOpenFile.
+					It starts by creating and setting a temporary element to the tail of the list. We also need somewhere
+					to store the file we'll be fetching so we create a pointer for that aswell. Because the tail of the list points 
+					to nothing, our first step is to immediately move to the previous element, open the pointer stored there and 
+					retrieve the openfile pointer then compare the FD of that file to the one passed into the function. On success
+					it returns a pointer to the file. Failure will return NULL.
+					
+					When these three functions were successfully completed, the next step was to move onto implementing the last of 
+					the file related system calls. After gradually testing each system call, we came across an issue where close()
+					wasn't working as intended and threw assertion failures. Upon investigation it turned out that the files 
+					inode open counter had corrupted at some stage and wasn't allowing the file to be correctly closed.
+					
+					After investigating the documentation further we noticed references to making sure only a single thread had 
+					access to the files. After some research we realised that we had to use a data lock so that other threads 
+					couldn't interfere with anything that was being actively used at the time.
+					
+					So we implemented the FSLock lock and used it throughout the system calls to make sure that no other threads could be
+					corrupting anything else the user might have open. It fixed the issue, however our last issue was that with verifying
+					the user address pointer. 
+					
+					Using the function lload_stack that was provided to us in the lecture as a base, instead of passing the system calls
+					and theirarguemnts directly into the calls, we started varifying each address pointed above PHYS_BASE.
+					
+					We simply created 4 pointers and set tham all the return of load_stack at different offsets. While some could certainly be
+					pointing to a dangerous are, as not all system calls use 3 arguments, we only check the pointers just before they're called.
+					If they fail, a boolean value, broke, is set to 1, it leaves the switch case, and then goes into an if statement that
+					tidies up an issues that could exist; such as unresolved locks, and quits the currently running thread with an error code.
+					
+					The very last change made to the file was in exit status when we elected that our original implementation didn't actually
+					satisfy the specification for the exit status message. So we expanded the exit() call slightly so that only the program name
+					was printed to the user, as opposed to the arguments as well as it used to be.
+					
+					
+					
+					
+					

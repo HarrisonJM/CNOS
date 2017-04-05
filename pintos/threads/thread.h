@@ -93,8 +93,6 @@ typedef int tid_t;
     init list. all new process spawned from parent
     should be pushed onto the list.
 
-    Do I even need to do this? 
-
 */
 struct thread
 {
