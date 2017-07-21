@@ -490,41 +490,37 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
       //padding to 4 afterwards will speed up execution
       if (success) 
       {
-        int argc = 0; //records total size. -1 for indexing
+        int argc = 0; //records total size.
         size_t maxsize, total_length = 0;
         char *fn_copy = palloc_get_page (0);
         char *arg;
         char *svp;
 
-        if (fn_copy == NULL) //move this into function?
+        if (fn_copy == NULL) 
         {
           return TID_ERROR;
         }
         strlcpy (fn_copy, file_name, PGSIZE);
 
-        arg = strtok_r(file_name, " ", &svp);
+        arg = strtok_r(file_name, " ", &svp); //extract command_name here so we can loop strtok_r
         ++argc;
         maxsize = strlen(arg) +1;
 
         while((arg = strtok_r(NULL, " ", &svp))) //find largest argument and count arguments
         {
-          ++argc; //we need the number of arguments we have
+          ++argc; //we need the number of arguments we have for the array
           if((strlen(arg) +1) > maxsize)
           {
-              maxsize = strlen(arg) +1;
+              maxsize = strlen(arg) +1; 
+              //we need to find the size of the largest element for the argv array
           }
         }
 
         char argv[argc + 1][maxsize];
 
-        strlcpy (file_name, fn_copy, PGSIZE);
-
-        //palloc_free_page(fn_copy);
-        
+        strlcpy (file_name, fn_copy, PGSIZE);        
 
         arg = strtok_r(file_name, " ", &svp); //command name
-
-        //palloc_free_page(file_name);
         
         int i = argc;
 
@@ -542,14 +538,18 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
 
         *esp = PHYS_BASE;
         
-        uint32_t adresses[argc];
+        uint32_t adresses[argc]; //Array containing pointers to the beginning of each argument
+
         for(i = 0; i < argc; ++i) //pushes arguments onto stack, backwards, but order doesn't matter here
         {
           int len = strlen((char*)&argv[i][0]) +1;
-          *esp -= len;
-          adresses[i] = *esp;
+          *esp -= len; //we need to move the stack so that we don't overwrite data
+
+          adresses[i] = *esp; //store the address it's been written to to be pushed on later
+
           memcpy(*esp, (char*)&argv[i][0], len);
-          total_length += len;
+
+          total_length += len; //running total of length for word-alignment
         }
 
         *esp -= 4 - total_length % 4; //align
@@ -560,7 +560,7 @@ static bool setup_stack (void **esp, char* file_name)///////////////////////////
           *(uint32_t*)*esp = adresses[i];
         }
 
-        uint32_t tempesp = *esp;
+        uint32_t tempesp = *esp; //record address of ARGV
 
         //finally, push argv, argc and return address
         *esp -= 4;

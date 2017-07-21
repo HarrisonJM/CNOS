@@ -22,7 +22,7 @@ struct lock FSLock; //data lock for system calls
 /* 
     adds open files to a list of open files
 */
-int AddOpenFiles(int fd, struct openfiles* file_o)
+int Addopenfile(int fd, struct openfile* file_o)
 {
     file_o->_fd = fd;
     list_push_back(&openfilelist, &file_o->_elem);
@@ -36,13 +36,13 @@ int AddOpenFiles(int fd, struct openfiles* file_o)
 struct file* GetOpenFile(int fd)
 {
     struct list_elem *currentelem; //current list element we're pointing to
-    struct openfiles *of; //the file we're going to return
+    struct openfile *of; //the file we're going to return
 
     currentelem = list_tail(&openfilelist);
 
     while((currentelem = list_prev(currentelem)) != list_head(&openfilelist))
     {
-        of = list_entry(currentelem, struct openfiles, _elem);
+        of = list_entry(currentelem, struct openfile, _elem);
 
         if(of->_fd == fd) //fd should be correct
         {
@@ -76,7 +76,7 @@ void syscall_init (void)
 /*
     Checks for a valid user pointer
 */
-static uint32_t load_stack(struct intr_frame *f, int offset) //dunno what this does but I hate it
+static uint32_t load_stack(struct intr_frame *f, int offset)
 {
     bool check = f->esp + offset < PHYS_BASE; //true if pointer is less than stack, so less than PHYSBASE
 
@@ -90,7 +90,6 @@ static uint32_t load_stack(struct intr_frame *f, int offset) //dunno what this d
     }
 }
 
-//our part 2
 /*
     System Call handler.
         Arguments are given in order. on the stack
@@ -187,6 +186,7 @@ static void syscall_handler (struct intr_frame *f) // UNUSED)
 
             if((arg1 != PHYS_BASE) && (arg2 != PHYS_BASE) && (arg3 != PHYS_BASE))
                 f->eax = write(*(esp+1), (void*)*(esp+2), *(esp+3));
+
             else
                 broke = 1;
 
@@ -226,7 +226,8 @@ static void syscall_handler (struct intr_frame *f) // UNUSED)
     {
         printf("\nUSER POINTER ERROR!\n %d", (int)*esp);
 
-        if(lock_held_by_current_thread(&FSLock))
+        //this shouldn't be needed but it's a good defense incase
+        if(lock_held_by_current_thread(&FSLock)) 
         {
             lock_release(&FSLock);
         }
@@ -346,14 +347,14 @@ int open (const char *file) //6
         f = filesys_open(file);
     }
 
-    struct openfiles fileo;
+    struct openfile fileo;
 
     if(f != NULL) //null struct
     {
         fileo._fd = getFileDescriptor();
         fileo._file = f;
 
-        if(AddOpenFiles(fileo._fd, &fileo) == -1)
+        if(Addopenfile(fileo._fd, &fileo) == -1)
         {
             return -1;
         }
@@ -382,6 +383,7 @@ int filesize (int fd) //7
     if(f != NULL)
     {
         size = file_length(f);
+
         lock_release(&FSLock);
         return size;
     }
@@ -443,7 +445,7 @@ int write (int fd, const void *buffer, unsigned size) //9
     switch(fd)
     {
         case STDOUT_FILENO:
-            putbuf(buffer, size); //TODO: seperate bytes
+            putbuf(buffer, size);
             break;
         case STDIN_FILENO:
             return -1; //error, can't write to in
@@ -520,30 +522,31 @@ void close (int fd) //12
 {
     struct list_elem *currentelem, *prevelem;
 
-    struct openfiles *of;
+    struct openfile *of;
 
     lock_acquire(&FSLock);
 
-    currentelem = list_end (&openfilelist);
+    currentelem = list_tail(&openfilelist);
 
-    while (currentelem != list_head (&openfilelist))
+    while((currentelem = list_prev(currentelem)) != list_head(&openfilelist))
     {
         prevelem = list_prev (currentelem);
-        of = list_entry (currentelem, struct openfiles, _elem);
+        of = list_entry (currentelem, struct openfile, _elem);
 
         if (of->_fd == fd)
         {
-            file_close (of->_file); //Panic here due to corrupted inode open counter
+            file_close (of->_file); 
             list_remove (currentelem);
             lock_release(&FSLock);
             return;
         }
 
         currentelem = prevelem;
-    }    Reads from the fd 
-    into the buffer pointer
-    for size amount
+    }
 
     lock_release(&FSLock);
     return;
 }
+
+//H: 3.65
+//W: 7.83

@@ -12,7 +12,7 @@
     struct to hold open files
     typedef struct openfiles of
 */
-struct openfiles
+struct openfile
 {
     int _fd;
     struct file* _file;
@@ -22,7 +22,7 @@ struct openfiles
 
 //struct lock sysCallLock; //data lock for system calls
 
-int AddOpenFiles(int fd, struct openfiles *file_o);
+int AddOpenFiles(int fd, struct openfile *file_o);
 struct file* GetOpenFile(int fd);
 int getFileDescriptor(void);
 
